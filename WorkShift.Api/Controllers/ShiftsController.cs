@@ -13,7 +13,7 @@ namespace WorkShift.Api.Controllers;
 [Route("api/[controller]")]
 public class ShiftsController : ControllerBase
 {
-    // DEFAULT RULES
+    
     private const double ShiftHours = 10.5;
     private const int MinRestHours = 12;
     private const double MaxWeeklyHours = 52.5; 
