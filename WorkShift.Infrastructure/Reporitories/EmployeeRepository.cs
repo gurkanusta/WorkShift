@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using WorkShift.Application.Abstractions;
 using WorkShift.Domain.Entities;
 using WorkShift.Infrastructure.Data;
@@ -32,5 +32,36 @@ public class EmployeeRepository : IEmployeeRepository
         _db.Employees.Add(employee);
         await _db.SaveChangesAsync(ct);
         return employee;
+    }
+
+    public async Task<Employee?> UpdateAsync(Employee employee, CancellationToken ct = default)
+    {
+        var existing = await _db.Employees
+            .FirstOrDefaultAsync(x => x.Id == employee.Id && !x.IsDeleted, ct);
+
+        if (existing is null) return null;
+
+        existing.FirstName = employee.FirstName;
+        existing.LastName = employee.LastName;
+        existing.Role = employee.Role;
+        existing.DepartmentId = employee.DepartmentId;
+        existing.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return existing;
+    }
+
+    public async Task<bool> DeactivateAsync(Guid id, CancellationToken ct = default)
+    {
+        var employee = await _db.Employees
+            .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
+
+        if (employee is null) return false;
+
+        employee.IsActive = false;
+        employee.UpdatedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 }
