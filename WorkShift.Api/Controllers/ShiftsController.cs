@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using WorkShift.Api.Contracts.Shifts;
 using WorkShift.Application.Abstractions;
 using WorkShift.Domain.Entities;
@@ -6,8 +6,16 @@ using WorkShift.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Claims;
 
+using WorkShift.Api.Contracts.Shifts;
+
 
 namespace WorkShift.Api.Controllers;
+
+
+
+
+
+
 
 [ApiController]
 [Route("api/[controller]")]
@@ -149,6 +157,76 @@ public class ShiftsController : ControllerBase
     {
         var ok = await _shifts.SoftDeleteAsync(id, ct);
         return ok ? NoContent() : NotFound();
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ShiftResponse>> GetById(Guid id, CancellationToken ct)
+    {
+        var shift = await _shifts.GetByIdAsync(id, ct);
+        if (shift is null) return NotFound();
+
+        return Ok(new ShiftResponse(
+            shift.Id,
+            shift.EmployeeId,
+            shift.DepartmentId,
+            shift.Date.Date,
+            (int)shift.ShiftType,
+            shift.StartTime.ToString(@"hh\:mm"),
+            shift.EndTime.ToString(@"hh\:mm")
+        ));
+    }
+
+    [Authorize(Roles = "Admin")]
+    [HttpGet("department/{departmentId:guid}/summary")]
+    public async Task<ActionResult<ShiftSummaryResponse>> GetDepartmentSummary(
+        Guid departmentId,
+        [FromQuery] DateTime date,
+        CancellationToken ct)
+    {
+        var dep = await _departments.GetByIdAsync(departmentId, ct);
+        if (dep is null) return NotFound("Department not found.");
+
+        var (weekStart, weekEnd) = GetWeekRange(date.Date);
+        var shifts = await _shifts.GetByDepartmentBetweenAsync(departmentId, weekStart, weekEnd, ct);
+        var employees = await _employees.GetAllAsync(ct);
+
+        var empDict = employees
+            .Where(e => e.DepartmentId == departmentId)
+            .ToDictionary(e => e.Id);
+
+        var breakdown = shifts
+            .GroupBy(s => s.EmployeeId)
+            .Select(g =>
+            {
+                var emp = empDict.GetValueOrDefault(g.Key);
+                var fullName = emp is null ? g.Key.ToString() : $"{emp.FirstName} {emp.LastName}";
+                var dayCount = g.Count(s => s.ShiftType == ShiftType.Day);
+                var nightCount = g.Count(s => s.ShiftType == ShiftType.Night);
+                var hours = g.Sum(s =>
+                {
+                    var (st, en) = GetShiftDateTimeRange(s.Date.Date, s.ShiftType, s.StartTime, s.EndTime);
+                    return (en - st).TotalHours;
+                });
+                return new EmployeeShiftCount(g.Key, fullName, dayCount, nightCount, Math.Round(hours, 2));
+            })
+            .OrderByDescending(x => x.TotalHours)
+            .ToList();
+
+        var totalHours = breakdown.Sum(x => x.TotalHours);
+
+        var summary = new ShiftSummaryResponse(
+            departmentId,
+            dep.Name,
+            weekStart,
+            weekEnd,
+            shifts.Count,
+            shifts.Count(s => s.ShiftType == ShiftType.Day),
+            shifts.Count(s => s.ShiftType == ShiftType.Night),
+            Math.Round(totalHours, 2),
+            breakdown
+        );
+
+        return Ok(summary);
     }
 
 
