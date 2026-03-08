@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
 using WorkShift.Application.Abstractions;
 using WorkShift.Domain.Entities;
 using WorkShift.Infrastructure.Data;
@@ -13,6 +14,9 @@ public class ShiftRepository : IShiftRepository
     {
         _db = db;
     }
+
+    public Task<Shift?> GetByIdAsync(Guid id, CancellationToken ct = default)
+        => _db.Shifts.FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, ct);
 
     public Task<List<Shift>> GetByEmployeeBetweenAsync(Guid employeeId, DateTime fromDate, DateTime toDate, CancellationToken ct = default)
         => _db.Shifts
@@ -48,5 +52,4 @@ public class ShiftRepository : IShiftRepository
         await _db.SaveChangesAsync(ct);
         return true;
     }
-
 }
